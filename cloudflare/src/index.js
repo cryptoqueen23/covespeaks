@@ -70,6 +70,24 @@ if(path==='/api/admin/nominations/moderate'&&req.method==='POST'){
 if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
 const body=await req.json();if(!validId(body.id)||!['published','rejected','pending'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
 await env.DB.prepare('UPDATE nominations SET status=? WHERE id=?').bind(body.status,body.id).run();return json({ok:true},200,headers)}
+const CANDIDATES={6:['Jesus Mendez','Jay Manning'],7:['Dana Wall','Trae Cunningham']};
+if(path==='/api/candidate-feedback'&&req.method==='GET'){
+const place=Number(url.searchParams.get('place'));if(!CANDIDATES[place])return json({error:'Unknown race'},400,headers);
+const rows=await env.DB.prepare("SELECT id,place,candidate,topic,comment,source_url,created_at FROM candidate_feedback WHERE place=? AND status='published' ORDER BY created_at DESC LIMIT 100").bind(place).all();return json({feedback:rows.results},200,headers)}
+if(path==='/api/candidate-feedback'&&req.method==='POST'){
+const body=await req.json();const place=Number(body.place),candidate=safeText(body.candidate,80),topic=safeText(body.topic,80),comment=safeText(body.comment,1200),source=safeText(body.sourceUrl,500);
+if(!CANDIDATES[place]?.includes(candidate)||!['Roads & infrastructure','Taxes & budget','Water & utilities','Transparency & accountability','Public safety','Other local issue'].includes(topic)||comment.length<25||comment.length>1200)return json({error:'Complete the candidate feedback form'},400,headers);
+if(source&&(!/^https:\/\//i.test(source)))return json({error:'Source must be an HTTPS URL'},400,headers);
+if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
+const prior=await env.DB.prepare('SELECT id FROM candidate_feedback WHERE visitor_id=? AND place=? AND candidate=?').bind(id,place,candidate).first();if(prior)return json({error:'This browser has already submitted feedback about this candidate'},409,headers);
+await env.DB.prepare('INSERT INTO candidate_feedback(id,visitor_id,place,candidate,topic,comment,source_url) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),id,place,candidate,topic,comment,source||null).run();return json({ok:true},201,headers)}
+if(path==='/api/admin/candidate-feedback'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const rows=await env.DB.prepare('SELECT id,place,candidate,topic,comment,source_url,status,created_at FROM candidate_feedback ORDER BY created_at DESC LIMIT 300').all();return json({feedback:rows.results},200,headers)}
+if(path==='/api/admin/candidate-feedback/moderate'&&req.method==='POST'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const body=await req.json();if(!validId(body.id)||!['published','rejected'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
+await env.DB.prepare('UPDATE candidate_feedback SET status=? WHERE id=?').bind(body.status,body.id).run();return json({ok:true},200,headers)}
 if(path==='/api/insurance-leads'&&req.method==='POST'){
 if(!req.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required'},415,headers);
 const body=await req.json();if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
