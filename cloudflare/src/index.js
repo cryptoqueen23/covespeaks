@@ -70,6 +70,20 @@ if(path==='/api/admin/nominations/moderate'&&req.method==='POST'){
 if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
 const body=await req.json();if(!validId(body.id)||!['published','rejected','pending'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
 await env.DB.prepare('UPDATE nominations SET status=? WHERE id=?').bind(body.status,body.id).run();return json({ok:true},200,headers)}
+if(path==='/api/insurance-leads'&&req.method==='POST'){
+if(!req.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required'},415,headers);
+const body=await req.json();if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
+const name=safeText(body.name,100),email=safeText(body.email,254).toLowerCase(),phone=safeText(body.phone,35),interest=body.interest;
+if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!['life','health','both'].includes(interest)||body.consent!==true)return json({error:'Please complete the form and agree to be contacted'},400,headers);
+const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM insurance_leads WHERE email=? AND created_at>datetime('now','-1 day')").bind(email).first();
+if(recent.n>0)return json({ok:true,message:'Your request has already been received'},200,headers);
+const consentText='I request information about life and/or health insurance from Phoenix Securitas and consent to being contacted about my inquiry. This is optional and unrelated to Cove Speaks civic participation.';
+await env.DB.prepare('INSERT INTO insurance_leads(id,name,email,phone,interest,consent_text) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),name,email,phone||null,interest,consentText).run();
+return json({ok:true},201,headers)}
+if(path==='/api/admin/insurance-leads'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const rows=await env.DB.prepare('SELECT id,name,email,phone,interest,status,created_at FROM insurance_leads ORDER BY created_at DESC LIMIT 300').all();
+return json({leads:rows.results},200,headers)}
 if(req.method==='GET'&&path==='/api/discussions'){
 const rows=await env.DB.prepare("SELECT d.id,d.display_name,d.category,d.title,d.body,d.created_at,(SELECT COUNT(*) FROM replies r WHERE r.discussion_id=d.id AND r.status='published') AS reply_count FROM discussions d WHERE d.status='published' ORDER BY d.created_at DESC LIMIT 50").all();
 return json({discussions:rows.results},200,headers)}
