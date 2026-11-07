@@ -17,6 +17,23 @@ const url=new URL(req.url);const path=url.pathname;let id=cookie(req);let setCoo
 if(!validId(id)){id=crypto.randomUUID();setCookie=`${COOKIE}=${id}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=None`;}
 const headers={...h,...(setCookie?{'Set-Cookie':setCookie}:{})};
 await env.DB.prepare('INSERT INTO visitors(id) VALUES (?) ON CONFLICT(id) DO NOTHING').bind(id).run();
+const SURVEY_KEY='cove-report-card-2026';
+const SURVEY_FIELDS=['roads','water','utility_bills','taxes','safety','spending','transparency','parks','quality_of_life'];
+if(path==='/api/survey/results'&&req.method==='GET'){
+const rows=await env.DB.prepare('SELECT answers FROM survey_responses WHERE survey_key=?').bind(SURVEY_KEY).all();
+const summary={};for(const field of SURVEY_FIELDS)summary[field]={count:0,total:0,ratings:[0,0,0,0,0]};
+for(const row of rows.results){let answers;try{answers=JSON.parse(row.answers)}catch{continue}for(const field of SURVEY_FIELDS){const v=answers[field];if(Number.isInteger(v)&&v>=1&&v<=5){summary[field].count++;summary[field].total+=v;summary[field].ratings[v-1]++}}}
+for(const field of SURVEY_FIELDS){const o=summary[field];o.average=o.count?Math.round(o.total/o.count*10)/10:null;delete o.total}
+const own=await env.DB.prepare('SELECT id FROM survey_responses WHERE survey_key=? AND visitor_id=?').bind(SURVEY_KEY,id).first();
+return json({total:rows.results.length,summary,submitted:!!own},200,headers)}
+if(path==='/api/survey/respond'&&req.method==='POST'){
+if(!req.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required'},415,headers);
+const body=await req.json();if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
+const answers={};for(const field of SURVEY_FIELDS){const v=body.answers?.[field];if(v===undefined||v===null||v==='')continue;if(!Number.isInteger(v)||v<1||v>5)return json({error:'Invalid rating'},400,headers);answers[field]=v}
+if(Object.keys(answers).length<1)return json({error:'Rate at least one service'},400,headers);
+const existing=await env.DB.prepare('SELECT id FROM survey_responses WHERE survey_key=? AND visitor_id=?').bind(SURVEY_KEY,id).first();if(existing)return json({error:'A response from this browser has already been recorded'},409,headers);
+await env.DB.prepare('INSERT INTO survey_responses(id,survey_key,visitor_id,answers) VALUES(?,?,?,?)').bind(crypto.randomUUID(),SURVEY_KEY,id,JSON.stringify(answers)).run();
+return json({ok:true},201,headers)}
 if(req.method==='GET'&&path==='/api/discussions'){
 const rows=await env.DB.prepare("SELECT d.id,d.display_name,d.category,d.title,d.body,d.created_at,(SELECT COUNT(*) FROM replies r WHERE r.discussion_id=d.id AND r.status='published') AS reply_count FROM discussions d WHERE d.status='published' ORDER BY d.created_at DESC LIMIT 50").all();
 return json({discussions:rows.results},200,headers)}
