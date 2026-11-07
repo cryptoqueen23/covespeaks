@@ -9,3 +9,7 @@ CREATE TABLE IF NOT EXISTS reports (id TEXT PRIMARY KEY, visitor_id TEXT NOT NUL
 -- People's Pulse community survey. One response per visitor cookie (not identity verification).
 CREATE TABLE IF NOT EXISTS survey_responses (id TEXT PRIMARY KEY, survey_key TEXT NOT NULL, visitor_id TEXT NOT NULL, answers TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(survey_key,visitor_id));
 CREATE INDEX IF NOT EXISTS survey_responses_key ON survey_responses(survey_key);
+
+-- Moderated recognition and accountability nominations
+CREATE TABLE IF NOT EXISTS nominations (id TEXT PRIMARY KEY,visitor_id TEXT NOT NULL,hall TEXT NOT NULL CHECK(hall IN ('fame','shame')),nominee TEXT NOT NULL,role TEXT NOT NULL,details TEXT NOT NULL,source_url TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','published','rejected')),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS nominations_by_hall ON nominations(hall,status,created_at DESC);
