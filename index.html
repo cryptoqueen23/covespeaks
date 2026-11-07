@@ -37,7 +37,7 @@ const read=key=>{try{return JSON.parse(localStorage.getItem(key)||'[]')}catch{re
 $('survey').addEventListener('submit',e=>{e.preventDefault();const entries=read('cove_surveys');entries.push({priority:$('priority').value,feedback:$('feedback').value});localStorage.setItem('cove_surveys',JSON.stringify(entries));$('survey-status').textContent='Saved in this browser only. Thank you for speaking up!';e.target.reset()});
 /* Set both values after the Cloudflare Worker and Turnstile widget are deployed. */
 const DISCUSSION_API='';
-const TURNSTILE_SITE_KEY='';
+const TURNSTILE_SITE_KEY='0x4AAAAAAF31k1SBQbLu193m';
 let selectedDiscussion=null;
 const boardReady=Boolean(DISCUSSION_API&&TURNSTILE_SITE_KEY);
 const node=(tag,text)=>{const el=document.createElement(tag);el.textContent=text;return el};
