@@ -13,3 +13,7 @@ CREATE INDEX IF NOT EXISTS survey_responses_key ON survey_responses(survey_key);
 -- Moderated recognition and accountability nominations
 CREATE TABLE IF NOT EXISTS nominations (id TEXT PRIMARY KEY,visitor_id TEXT NOT NULL,hall TEXT NOT NULL CHECK(hall IN ('fame','shame')),nominee TEXT NOT NULL,role TEXT NOT NULL,details TEXT NOT NULL,source_url TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','published','rejected')),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS nominations_by_hall ON nominations(hall,status,created_at DESC);
+
+-- Opt-in insurance inquiries; never joined to civic participation records
+CREATE TABLE IF NOT EXISTS insurance_leads (id TEXT PRIMARY KEY,name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,interest TEXT NOT NULL,consent_text TEXT NOT NULL,source TEXT NOT NULL DEFAULT 'cove-speaks',status TEXT NOT NULL DEFAULT 'new',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS insurance_leads_recent ON insurance_leads(created_at DESC);
