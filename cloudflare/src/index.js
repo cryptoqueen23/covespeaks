@@ -48,6 +48,28 @@ if(Object.keys(answers).length<1)return json({error:'Answer at least one questio
 const existing=await env.DB.prepare('SELECT id FROM survey_responses WHERE survey_key=? AND visitor_id=?').bind(SURVEY_KEY,id).first();if(existing)return json({error:'A response from this browser has already been recorded'},409,headers);
 await env.DB.prepare('INSERT INTO survey_responses(id,survey_key,visitor_id,answers) VALUES(?,?,?,?)').bind(crypto.randomUUID(),SURVEY_KEY,id,JSON.stringify(answers)).run();
 return json({ok:true},201,headers)}
+if(path==='/api/nominations'&&req.method==='GET'){
+const hall=url.searchParams.get('hall');if(!['fame','shame'].includes(hall))return json({error:'Invalid hall'},400,headers);
+const rows=await env.DB.prepare("SELECT id,hall,nominee,role,details,source_url,created_at FROM nominations WHERE hall=? AND status='published' ORDER BY created_at DESC LIMIT 100").bind(hall).all();
+return json({nominations:rows.results},200,headers)}
+if(path==='/api/nominations'&&req.method==='POST'){
+if(!req.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required'},415,headers);
+const body=await req.json();if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
+const hall=body.hall,nominee=safeText(body.nominee,100),role=safeText(body.role,100),details=safeText(body.details,2000);
+if(!['fame','shame'].includes(hall)||nominee.length<2||role.length<2||details.length<25||body.details?.length>2000)return json({error:'Please complete the nomination with specific details'},400,headers);
+let source=null;if(body.sourceUrl){if(typeof body.sourceUrl!=='string'||body.sourceUrl.length>500)return json({error:'Invalid source URL'},400,headers);try{const u=new URL(body.sourceUrl);if(!['https:','http:'].includes(u.protocol))throw Error();source=u.href}catch{return json({error:'Invalid source URL'},400,headers)}}
+const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM nominations WHERE visitor_id=? AND created_at>datetime('now','-1 hour')").bind(id).first();
+if(recent.n>=3)return json({error:'Please wait before submitting another nomination'},429,headers);
+await env.DB.prepare('INSERT INTO nominations(id,visitor_id,hall,nominee,role,details,source_url) VALUES(?,?,?,?,?,?,?)').bind(crypto.randomUUID(),id,hall,nominee,role,details,source).run();
+return json({ok:true,status:'pending'},201,headers)}
+if(path==='/api/admin/nominations'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const rows=await env.DB.prepare("SELECT id,hall,nominee,role,details,source_url,status,created_at FROM nominations ORDER BY CASE WHEN status='pending' THEN 0 ELSE 1 END,created_at DESC LIMIT 300").all();
+return json({nominations:rows.results},200,headers)}
+if(path==='/api/admin/nominations/moderate'&&req.method==='POST'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const body=await req.json();if(!validId(body.id)||!['published','rejected','pending'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
+await env.DB.prepare('UPDATE nominations SET status=? WHERE id=?').bind(body.status,body.id).run();return json({ok:true},200,headers)}
 if(req.method==='GET'&&path==='/api/discussions'){
 const rows=await env.DB.prepare("SELECT d.id,d.display_name,d.category,d.title,d.body,d.created_at,(SELECT COUNT(*) FROM replies r WHERE r.discussion_id=d.id AND r.status='published') AS reply_count FROM discussions d WHERE d.status='published' ORDER BY d.created_at DESC LIMIT 50").all();
 return json({discussions:rows.results},200,headers)}
