@@ -25,3 +25,7 @@ CREATE INDEX IF NOT EXISTS candidate_feedback_listing ON candidate_feedback(plac
 -- Resident story submissions, with editor review before publication
 CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY,visitor_id TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL,byline TEXT NOT NULL,body TEXT NOT NULL,source_url TEXT,contact_email TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','published','rejected')),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,published_at TEXT);
 CREATE INDEX IF NOT EXISTS stories_public ON stories(status,published_at DESC,created_at DESC);
+
+-- Advertising inquiries kept separate from civic submissions
+CREATE TABLE IF NOT EXISTS advertising_inquiries (id TEXT PRIMARY KEY,business_name TEXT NOT NULL,contact_name TEXT NOT NULL,email TEXT NOT NULL,phone TEXT,placement TEXT NOT NULL,message TEXT NOT NULL,consent INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'new',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS advertising_inquiries_recent ON advertising_inquiries(created_at DESC);
