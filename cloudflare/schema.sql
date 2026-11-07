@@ -21,3 +21,7 @@ CREATE INDEX IF NOT EXISTS insurance_leads_recent ON insurance_leads(created_at 
 -- Moderated, non-ranked resident candidate feedback; one submission per browser per candidate
 CREATE TABLE IF NOT EXISTS candidate_feedback (id TEXT PRIMARY KEY,visitor_id TEXT NOT NULL,place INTEGER NOT NULL CHECK(place IN (6,7)),candidate TEXT NOT NULL,topic TEXT NOT NULL,comment TEXT NOT NULL,source_url TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','published','rejected')),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(visitor_id,place,candidate));
 CREATE INDEX IF NOT EXISTS candidate_feedback_listing ON candidate_feedback(place,candidate,status,created_at DESC);
+
+-- Resident story submissions, with editor review before publication
+CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY,visitor_id TEXT NOT NULL,title TEXT NOT NULL,category TEXT NOT NULL,byline TEXT NOT NULL,body TEXT NOT NULL,source_url TEXT,contact_email TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','published','rejected')),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,published_at TEXT);
+CREATE INDEX IF NOT EXISTS stories_public ON stories(status,published_at DESC,created_at DESC);
