@@ -70,6 +70,22 @@ if(path==='/api/admin/nominations/moderate'&&req.method==='POST'){
 if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
 const body=await req.json();if(!validId(body.id)||!['published','rejected','pending'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
 await env.DB.prepare('UPDATE nominations SET status=? WHERE id=?').bind(body.status,body.id).run();return json({ok:true},200,headers)}
+const STORY_CATEGORIES=['Community Voices','Celebrate Cove','Local Accountability','Schools & Families','Small Businesses'];
+if(path==='/api/stories'&&req.method==='GET'){
+const rows=await env.DB.prepare("SELECT id,title,category,byline,body,source_url,published_at FROM stories WHERE status='published' ORDER BY published_at DESC LIMIT 100").all();return json({stories:rows.results},200,headers)}
+if(path==='/api/stories'&&req.method==='POST'){
+const body=await req.json(),title=safeText(body.title,150),category=safeText(body.category,70),byline=safeText(body.byline,70),story=safeText(body.body,5000),source=safeText(body.sourceUrl,500),email=safeText(body.email,254);
+if(title.length<8||!STORY_CATEGORIES.includes(category)||byline.length<2||story.length<100||story.length>5000||source&&!/^https:\/\//i.test(source)||email&&!/^\S+@\S+\.\S+$/.test(email))return json({error:'Check your story details'},400,headers);
+if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
+const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM stories WHERE visitor_id=? AND created_at>datetime('now','-1 hour')").bind(id).first();if(recent.n>=3)return json({error:'Please wait before submitting another story'},429,headers);
+await env.DB.prepare('INSERT INTO stories(id,visitor_id,title,category,byline,body,source_url,contact_email) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(),id,title,category,byline,story,source||null,email||null).run();return json({ok:true},201,headers)}
+if(path==='/api/admin/stories'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const rows=await env.DB.prepare('SELECT id,title,category,byline,body,source_url,contact_email,status,created_at FROM stories ORDER BY created_at DESC LIMIT 300').all();return json({stories:rows.results},200,headers)}
+if(path==='/api/admin/stories/moderate'&&req.method==='POST'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const body=await req.json();if(!validId(body.id)||!['published','rejected'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
+await env.DB.prepare("UPDATE stories SET status=?,published_at=CASE WHEN ?='published' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?").bind(body.status,body.status,body.id).run();return json({ok:true},200,headers)}
 const CANDIDATES={6:['Jesus Mendez','Jay Manning'],7:['Dana Wall','Trae Cunningham']};
 if(path==='/api/candidate-feedback'&&req.method==='GET'){
 const place=Number(url.searchParams.get('place'));if(!CANDIDATES[place])return json({error:'Unknown race'},400,headers);
