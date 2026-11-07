@@ -70,6 +70,15 @@ if(path==='/api/admin/nominations/moderate'&&req.method==='POST'){
 if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
 const body=await req.json();if(!validId(body.id)||!['published','rejected','pending'].includes(body.status))return json({error:'Invalid moderation action'},400,headers);
 await env.DB.prepare('UPDATE nominations SET status=? WHERE id=?').bind(body.status,body.id).run();return json({ok:true},200,headers)}
+if(path==='/api/advertising-inquiries'&&req.method==='POST'){
+const body=await req.json(),business=safeText(body.business,120),name=safeText(body.name,100),email=safeText(body.email,254),phone=safeText(body.phone,40),placement=safeText(body.placement,70),message=safeText(body.message,1500);
+if(business.length<2||name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!['Homepage placement','Sponsored business spotlight','Community event promotion','Custom advertising package'].includes(placement)||message.length<15||body.consent!==true)return json({error:'Complete all required fields and consent'},400,headers);
+if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
+const recent=await env.DB.prepare("SELECT COUNT(*) AS n FROM advertising_inquiries WHERE email=? AND created_at>datetime('now','-1 day')").bind(email.toLowerCase()).first();if(recent.n>=3)return json({error:'Please wait before sending another inquiry'},429,headers);
+await env.DB.prepare('INSERT INTO advertising_inquiries(id,business_name,contact_name,email,phone,placement,message,consent) VALUES(?,?,?,?,?,?,?,1)').bind(crypto.randomUUID(),business,name,email.toLowerCase(),phone||null,placement,message).run();return json({ok:true},201,headers)}
+if(path==='/api/admin/advertising-inquiries'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const rows=await env.DB.prepare('SELECT id,business_name,contact_name,email,phone,placement,message,status,created_at FROM advertising_inquiries ORDER BY created_at DESC LIMIT 300').all();return json({inquiries:rows.results},200,headers)}
 const STORY_CATEGORIES=['Community Voices','Celebrate Cove','Local Accountability','Schools & Families','Small Businesses'];
 if(path==='/api/stories'&&req.method==='GET'){
 const rows=await env.DB.prepare("SELECT id,title,category,byline,body,source_url,published_at FROM stories WHERE status='published' ORDER BY published_at DESC LIMIT 100").all();return json({stories:rows.results},200,headers)}
