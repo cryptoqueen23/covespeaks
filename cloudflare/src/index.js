@@ -5,7 +5,7 @@ const fail=(message,status=400)=>json({error:message},status);
 function cookie(req){const raw=req.headers.get('Cookie')||'';return raw.split(';').map(s=>s.trim()).find(s=>s.startsWith(COOKIE+'='))?.slice(COOKIE.length+1)}
 function safeText(v,max){return typeof v==='string'?v.trim().slice(0,max):''}
 function validId(v){return typeof v==='string'&&/^[0-9a-f-]{36}$/i.test(v)}
-function cors(origin,env){return {'Access-Control-Allow-Origin':env.SITE_ORIGIN,'Access-Control-Allow-Credentials':'true','Access-Control-Allow-Headers':'Content-Type','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Vary':'Origin'}}
+function cors(origin,env){return {'Access-Control-Allow-Origin':env.SITE_ORIGIN,'Access-Control-Allow-Credentials':'true','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Vary':'Origin'}}
 async function verifyTurnstile(token,req,env){if(!env.TURNSTILE_SECRET)return false;const form=new FormData();form.append('secret',env.TURNSTILE_SECRET);form.append('response',token||'');form.append('remoteip',req.headers.get('CF-Connecting-IP')||'');try{const r=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{method:'POST',body:form});return (await r.json()).success===true}catch{return false}}
 async function throttle(db,id){const row=await db.prepare("SELECT COUNT(*) AS n FROM (SELECT created_at FROM discussions WHERE visitor_id=? AND created_at > datetime('now','-60 seconds') UNION ALL SELECT created_at FROM replies WHERE visitor_id=? AND created_at > datetime('now','-60 seconds'))").bind(id,id).first();return (row?.n||0)<3}
 export default {async fetch(req,env){
