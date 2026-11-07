@@ -24,6 +24,16 @@ if(req.method==='GET'&&path.startsWith('/api/discussions/')){
 const key=path.split('/')[3];if(!validId(key))return json({error:'Invalid discussion'},400,headers);
 const discussion=await env.DB.prepare("SELECT id,display_name,category,title,body,created_at FROM discussions WHERE id=? AND status='published'").bind(key).first();if(!discussion)return json({error:'Not found'},404,headers);
 const replies=await env.DB.prepare("SELECT id,parent_id,display_name,body,created_at FROM replies WHERE discussion_id=? AND status='published' ORDER BY created_at ASC LIMIT 300").bind(key).all();return json({discussion,replies:replies.results},200,headers)}
+if(path==='/api/admin/reports'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const rows=await env.DB.prepare("SELECT reports.id,reports.target_type,reports.target_id,reports.reason,reports.created_at,COALESCE(d.title,r.body,'Content unavailable') AS content,COALESCE(d.status,r.status,'missing') AS status FROM reports LEFT JOIN discussions d ON reports.target_type='discussion' AND reports.target_id=d.id LEFT JOIN replies r ON reports.target_type='reply' AND reports.target_id=r.id ORDER BY reports.created_at DESC LIMIT 200").all();
+return json({reports:rows.results},200,headers)}
+if(path==='/api/admin/moderate'&&req.method==='POST'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const body=await req.json();if(!['discussion','reply'].includes(body.targetType)||!validId(body.targetId)||!['hidden','published'].includes(body.status))return json({error:'Invalid action'},400,headers);
+const table=body.targetType==='discussion'?'discussions':'replies';
+await env.DB.prepare(`UPDATE ${table} SET status=? WHERE id=?`).bind(body.status,body.targetId).run();
+return json({ok:true},200,headers)}
 if(req.method==='POST'&&['/api/discussions','/api/replies','/api/reports'].includes(path)){
 if(!req.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required'},415,headers);
 const body=await req.json();if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
