@@ -18,19 +18,32 @@ if(!validId(id)){id=crypto.randomUUID();setCookie=`${COOKIE}=${id}; Path=/; Max-
 const headers={...h,...(setCookie?{'Set-Cookie':setCookie}:{})};
 await env.DB.prepare('INSERT INTO visitors(id) VALUES (?) ON CONFLICT(id) DO NOTHING').bind(id).run();
 const SURVEY_KEY='cove-report-card-2026';
-const SURVEY_FIELDS=['roads','water','utility_bills','taxes','safety','spending','transparency','parks','quality_of_life'];
+const SURVEY_FIELDS=['roads','water','utility_bills','taxes','safety','spending','transparency','parks','quality_of_life','council','mayor','city_manager','police','fire','public_works','water_department','wastewater','streets','sanitation','parks_department','planning','finance','municipal_court','city_secretary','economic_development'];
+const SURVEY_OPTIONS={heard:['yes','sometimes','no','unsure'],tax_value:['yes','somewhat','no','unsure'],moving:['yes','considering','no','unsure']};
+const RECALL_OPTIONS=['Strohfus','Hogan','Hawk','Hale','Hart','Treadway','Smith','Mayor Dancey'];
 if(path==='/api/survey/results'&&req.method==='GET'){
 const rows=await env.DB.prepare('SELECT answers FROM survey_responses WHERE survey_key=?').bind(SURVEY_KEY).all();
 const summary={};for(const field of SURVEY_FIELDS)summary[field]={count:0,total:0,ratings:[0,0,0,0,0]};
 for(const row of rows.results){let answers;try{answers=JSON.parse(row.answers)}catch{continue}for(const field of SURVEY_FIELDS){const v=answers[field];if(Number.isInteger(v)&&v>=1&&v<=5){summary[field].count++;summary[field].total+=v;summary[field].ratings[v-1]++}}}
+const choices={};for(const [field,options] of Object.entries(SURVEY_OPTIONS)){choices[field]=Object.fromEntries(options.map(v=>[v,0]))}
+const recall=Object.fromEntries(RECALL_OPTIONS.map(v=>[v,0]));let recallAnswered=0;
+const bills={water_sewer:{count:0,bands:{'Under $100':0,'$100–199':0,'$200–299':0,'$300–499':0,'$500+':0}},property_tax:{count:0,bands:{'Under $1,000':0,'$1,000–2,499':0,'$2,500–4,999':0,'$5,000–7,499':0,'$7,500+':0}}};
+for(const row of rows.results){let a;try{a=JSON.parse(row.answers)}catch{continue}
+for(const [field,options] of Object.entries(SURVEY_OPTIONS)){if(options.includes(a[field]))choices[field][a[field]]++}
+if(Array.isArray(a.recall)){recallAnswered++;for(const name of a.recall)if(Object.hasOwn(recall,name))recall[name]++}
+for(const field of ['water_sewer','property_tax']){const v=a[field];if(typeof v!=='number'||!Number.isFinite(v)||v<0)continue;const o=bills[field];o.count++;let band;if(field==='water_sewer')band=v<100?'Under $100':v<200?'$100–199':v<300?'$200–299':v<500?'$300–499':'$500+';else band=v<1000?'Under $1,000':v<2500?'$1,000–2,499':v<5000?'$2,500–4,999':v<7500?'$5,000–7,499':'$7,500+';o.bands[band]++}
+}
 for(const field of SURVEY_FIELDS){const o=summary[field];o.average=o.count?Math.round(o.total/o.count*10)/10:null;delete o.total}
 const own=await env.DB.prepare('SELECT id FROM survey_responses WHERE survey_key=? AND visitor_id=?').bind(SURVEY_KEY,id).first();
-return json({total:rows.results.length,summary,submitted:!!own},200,headers)}
+return json({total:rows.results.length,summary,choices,recall,recallAnswered,bills,submitted:!!own},200,headers)}
 if(path==='/api/survey/respond'&&req.method==='POST'){
 if(!req.headers.get('Content-Type')?.includes('application/json'))return json({error:'JSON required'},415,headers);
 const body=await req.json();if(!await verifyTurnstile(body.turnstileToken,req,env))return json({error:'Security verification required'},403,headers);
 const answers={};for(const field of SURVEY_FIELDS){const v=body.answers?.[field];if(v===undefined||v===null||v==='')continue;if(!Number.isInteger(v)||v<1||v>5)return json({error:'Invalid rating'},400,headers);answers[field]=v}
-if(Object.keys(answers).length<1)return json({error:'Rate at least one service'},400,headers);
+for(const [field,options] of Object.entries(SURVEY_OPTIONS)){const v=body.answers?.[field];if(v===undefined||v==='')continue;if(!options.includes(v))return json({error:'Invalid answer'},400,headers);answers[field]=v}
+if(body.answers?.recall!==undefined){const v=body.answers.recall;if(!Array.isArray(v)||v.length>RECALL_OPTIONS.length||new Set(v).size!==v.length||v.some(n=>!RECALL_OPTIONS.includes(n)))return json({error:'Invalid selection'},400,headers);answers.recall=v}
+for(const field of ['water_sewer','property_tax']){const v=body.answers?.[field];if(v===undefined||v==='')continue;if(typeof v!=='number'||!Number.isFinite(v)||v<0||v>1000000||Math.round(v*100)!==v*100)return json({error:'Invalid dollar amount'},400,headers);answers[field]=v}
+if(Object.keys(answers).length<1)return json({error:'Answer at least one question'},400,headers);
 const existing=await env.DB.prepare('SELECT id FROM survey_responses WHERE survey_key=? AND visitor_id=?').bind(SURVEY_KEY,id).first();if(existing)return json({error:'A response from this browser has already been recorded'},409,headers);
 await env.DB.prepare('INSERT INTO survey_responses(id,survey_key,visitor_id,answers) VALUES(?,?,?,?)').bind(crypto.randomUUID(),SURVEY_KEY,id,JSON.stringify(answers)).run();
 return json({ok:true},201,headers)}
