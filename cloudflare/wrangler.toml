@@ -8,4 +8,4 @@ SITE_ORIGIN = "https://covespeaks.vercel.app"
 [[d1_databases]]
 binding = "DB"
 database_name = "covespeaks-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "f9198c23-ee92-44f9-85a9-bce1beb40496"
