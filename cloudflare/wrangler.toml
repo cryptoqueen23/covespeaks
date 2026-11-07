@@ -1,0 +1,11 @@
+name = "covespeaks-api"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+SITE_ORIGIN = "https://covespeaks.vercel.app"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "covespeaks-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
