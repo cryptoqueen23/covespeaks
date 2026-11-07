@@ -24,6 +24,16 @@ if(req.method==='GET'&&path.startsWith('/api/discussions/')){
 const key=path.split('/')[3];if(!validId(key))return json({error:'Invalid discussion'},400,headers);
 const discussion=await env.DB.prepare("SELECT id,display_name,category,title,body,created_at FROM discussions WHERE id=? AND status='published'").bind(key).first();if(!discussion)return json({error:'Not found'},404,headers);
 const replies=await env.DB.prepare("SELECT id,parent_id,display_name,body,created_at FROM replies WHERE discussion_id=? AND status='published' ORDER BY created_at ASC LIMIT 300").bind(key).all();return json({discussion,replies:replies.results},200,headers)}
+if(path==='/api/admin/posts'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const kind=url.searchParams.get('type')||'all';if(!['all','discussion','reply'].includes(kind))return json({error:'Invalid filter'},400,headers);
+const limit=50;const offset=Math.min(10000,Math.max(0,Number.parseInt(url.searchParams.get('offset')||'0',10)||0));
+const parts=[];
+if(kind!=='reply')parts.push("SELECT id,'discussion' AS type,display_name,category,title,body,created_at,status,NULL AS discussion_id FROM discussions");
+if(kind!=='discussion')parts.push("SELECT id,'reply' AS type,display_name,NULL AS category,NULL AS title,body,created_at,status,discussion_id FROM replies");
+const union=parts.join(' UNION ALL ');
+const rows=await env.DB.prepare('SELECT * FROM ('+union+') ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?').bind(limit+1,offset).all();
+return json({posts:rows.results.slice(0,limit),hasMore:rows.results.length>limit,nextOffset:offset+limit},200,headers)}
 if(path==='/api/admin/reports'&&req.method==='GET'){
 if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
 const rows=await env.DB.prepare("SELECT reports.id,reports.target_type,reports.target_id,reports.reason,reports.created_at,COALESCE(d.title,r.body,'Content unavailable') AS content,COALESCE(d.status,r.status,'missing') AS status FROM reports LEFT JOIN discussions d ON reports.target_type='discussion' AND reports.target_id=d.id LEFT JOIN replies r ON reports.target_type='reply' AND reports.target_id=r.id ORDER BY reports.created_at DESC LIMIT 200").all();
