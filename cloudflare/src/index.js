@@ -21,6 +21,11 @@ const SURVEY_KEY='cove-report-card-2026';
 const SURVEY_FIELDS=['roads','water','utility_bills','taxes','safety','spending','transparency','parks','quality_of_life','council','mayor','city_manager','police','fire','public_works','water_department','wastewater','streets','sanitation','parks_department','planning','finance','municipal_court','city_secretary','economic_development'];
 const SURVEY_OPTIONS={heard:['yes','sometimes','no','unsure'],tax_value:['yes','somewhat','no','unsure'],moving:['yes','considering','no','unsure']};
 const RECALL_OPTIONS=['Strohfus','Hogan','Hawk','Hale','Hart','Treadway','Smith','Mayor Dancey'];
+if(path==='/api/admin/survey-responses'&&req.method==='GET'){
+if(!env.ADMIN_TOKEN||req.headers.get('Authorization')!=='Bearer '+env.ADMIN_TOKEN)return json({error:'Unauthorized'},401,headers);
+const count=await env.DB.prepare('SELECT COUNT(*) AS n FROM survey_responses WHERE survey_key=?').bind(SURVEY_KEY).first();
+const rows=await env.DB.prepare('SELECT id,answers,created_at FROM survey_responses WHERE survey_key=? ORDER BY created_at DESC LIMIT 100').bind(SURVEY_KEY).all();
+return json({total:count?.n||0,responses:rows.results.map(row=>{let answers={};try{answers=JSON.parse(row.answers)}catch{}return {id:row.id,created_at:row.created_at,answers}})},200,headers)}
 if(path==='/api/survey/results'&&req.method==='GET'){
 const rows=await env.DB.prepare('SELECT answers FROM survey_responses WHERE survey_key=?').bind(SURVEY_KEY).all();
 const summary={};for(const field of SURVEY_FIELDS)summary[field]={count:0,total:0,ratings:[0,0,0,0,0]};
